@@ -1,0 +1,5 @@
+Adam P. Matthews
+CSCE-311
+09/27/17
+
+I have completed Project 2 by following the instructions and using the OSP2 Manual. I was able to complete each function and provided comments. The project compiled and the simulation ran successfully.
