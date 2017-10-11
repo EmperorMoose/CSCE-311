@@ -1,0 +1,6 @@
+Adam P. Matthews
+CSCE-311
+10/11/17
+
+I have completed Project 3 by following the instructions and using the OSP2 Manual. I was able to complete each function and provided comments. The project compiled and the simulation ran successfully.
+I implemented one new fundtion, estimateBurstTime(). It was implemented because it is called often enough to justify its own method.
