@@ -1,6 +1,6 @@
 /**
 *Adam P. Matthews
-*09/27/17
+*10/11/17
 *CSCE-311
 **/
 package osp.Threads;
@@ -21,10 +21,10 @@ import osp.Resources.*;
 
    @OSPProject Threads
 */
-public class ThreadCB extends IflThreadCB 
+public class ThreadCB extends IflThreadCB
 {
     /**
-       The thread constructor. Must call 
+       The thread constructor. Must call
 
        	   super();
 
@@ -35,13 +35,15 @@ public class ThreadCB extends IflThreadCB
     public ThreadCB()
     {
         super();
-
+	int lastCpuBurst;
+	int estimatedBurstTime;
+	long lastDispatch;
     }
 
     /**
        This method will be called once at the beginning of the
        simulation. The student can set up static variables here.
-       
+
        @OSPProject Threads
     */
     public static void init()
@@ -50,12 +52,12 @@ public class ThreadCB extends IflThreadCB
 
     }
 
-    /** 
-        Sets up a new thread and adds it to the given task. 
-        The method must set the ready status 
-        and attempt to add thread to task. If the latter fails 
-        because there are already too many threads in this task, 
-        so does this method, otherwise, the thread is appended 
+    /**
+        Sets up a new thread and adds it to the given task.
+        The method must set the ready status
+        and attempt to add thread to task. If the latter fails
+        because there are already too many threads in this task,
+        so does this method, otherwise, the thread is appended
         to the ready queue and dispatch() is called.
 
 	The priority of the thread can be set using the getPriority/setPriority
@@ -73,13 +75,15 @@ public class ThreadCB extends IflThreadCB
         if(task == null)
         {
             dispatch();
-            return null
+            return null;
         }
         //if the thread count is greater than or equal to the max, call dispatch, return null
         ThreadCB thread = new ThreadCB();
         thread.setPriority(task.getPriority());
         thread.setStatus(ThreadReady);
         thread.setTask(task);
+	      thread.lastCpuBurst = 10;
+	      thread.estimatedBurstTime = 10;
         if(task.addThread(thread) != SUCCESS)
         {
             dispatch();
@@ -88,17 +92,17 @@ public class ThreadCB extends IflThreadCB
 
     }
 
-    /** 
-	Kills the specified thread. 
+    /**
+	Kills the specified thread.
 
 	The status must be set to ThreadKill, the thread must be
 	removed from the task's list of threads and its pending IORBs
 	must be purged from all device queues.
-        
-	If some thread was on the ready queue, it must removed, if the 
-	thread was running, the processor becomes idle, and dispatch() 
+
+	If some thread was on the ready queue, it must removed, if the
+	thread was running, the processor becomes idle, and dispatch()
 	must be called to resume a waiting thread.
-	
+
 	@OSPProject Threads
     */
     public void do_kill()
@@ -119,19 +123,20 @@ public class ThreadCB extends IflThreadCB
                 MMU.setPTBR(null);
                 getTask().setCurrentThread(null);
               }
-         }
+            }
          catch(NullPointerException e){}
          break;
+        }
 
     }
 
-    /** Suspends the thread that is currenly on the processor on the 
-        specified event. 
+    /** Suspends the thread that is currenly on the processor on the
+        specified event.
 
         Note that the thread being suspended doesn't need to be
         running. It can also be waiting for completion of a pagefault
         and be suspended on the IORB that is bringing the page in.
-	
+
 	Thread's status must be changed to ThreadWaiting or higher,
         the processor set to idle, the thread must be in the right
         waiting queue, and dispatch() must be called to give CPU
@@ -143,80 +148,88 @@ public class ThreadCB extends IflThreadCB
     */
     public void do_suspend(Event event)
     {
-        int status = getStatus();                  
-        if(status>=ThreadWaiting) 
-        {                                     
+        int status = getStatus();
+        if(status>=ThreadWaiting)
+        {
             setStatus(getStatus()+1);
+	    thread.lastCpuBurst = HClock.get() - thread.lastDispatch;
+	    thread.estimateBurstTime();
         }
-        else if(status == ThreadRunning) 
-        {                           
+        else if(status == ThreadRunning)
+        {
             ThreadCB thread = null;
             try
             {
                 thread = MMU.getPTBR().getTask().getCurrentThread();
-                if(this==thread) 
+                if(this==thread)
                 {
                     MMU.setPTBR(null);
                     getTask().setCurrentThread(null);
-                    setStatus(ThreadWaiting);                          
+                    setStatus(ThreadWaiting);
+		    thread.lastCpuBurst = HClock.get() - thread.lastDispatch;
+		    thread.estimateBurstTime();
                 }
             }
             catch(NullPointerException e){}
         }
         if(!readyQueue.contains(this))
         {
-            event.addThread(this);                               
-        } 
-        else 
+            event.addThread(this);
+        }
+        else
         {
             readyQueue.remove(this);
         }
-        ThreadCB.dispatch(); 
+        ThreadCB.dispatch();
     }
 
     /** Resumes the thread.
-        
+
 	Only a thread with the status ThreadWaiting or higher
 	can be resumed.  The status must be set to ThreadReady or
 	decremented, respectively.
 	A ready thread should be placed on the ready queue.
-	
+
 	@OSPProject Threads
     */
     public void do_resume()
     {
-        if(getStatus() < ThreadWaiting) 
+        if(getStatus() < ThreadWaiting)
         {
           MyOut.print(this, "Attempt to resume" + this + ", which wasn't waiting");
           return;
         }
 
-        if(this.getStatus() == ThreadWaiting) 
+        if(this.getStatus() == ThreadWaiting)
         {
           setStatus(ThreadReady);
-        } 
-        else if (this.getStatus() > ThreadWaiting) 
+	  thread.lastCpuBurst = HClock.get() - thread.lastDispatch;
+	  thread.estimateBurstTime();
+        }
+        else if (this.getStatus() > ThreadWaiting)
         {
           setStatus(getStatus()-1);
+	  thread.lastCpuBurst = HClock.get() - thread.lastDispatch;
+	  thread.estimateBurstTime();
         }
 
         //Place on ready queue if needed
-        if (getStatus() == ThreadReady) 
+        if (getStatus() == ThreadReady)
         {
           readyQueue.append(this);
         }
         dispatch(); // dispatch a thread
     }
 
-    /** 
-        Selects a thread from the run queue and dispatches it. 
+    /**
+        Selects a thread from the run queue and dispatches it.
 
-        If there is just one theread ready to run, reschedule the thread 
+        If there is just one theread ready to run, reschedule the thread
         currently on the processor.
 
         In addition to setting the correct thread status it must
         update the PTBR.
-	
+
 	@return SUCCESS or FAILURE
 
         @OSPProject Threads
@@ -224,36 +237,64 @@ public class ThreadCB extends IflThreadCB
     public static int do_dispatch()
     {
         ThreadCB thread = null;
-        
+
         //is there a currently running thread
         try
         {
-            thread = MMU.getPTBR().getTask().getCurrentThread();   
+            thread = MMU.getPTBR().getTask().getCurrentThread();
         }
         catch(NullPointerException e){}
         //if there is, place in ready queue
-        if(thread != null) 
+        if(thread != null)
         {
-            thread.getTask().setCurrentThread(null);
-            MMU.setPTBR(null);
-            thread.setStatus(ThreadReady);
-            readyQueue.append(thread);
+	         //Loop through the readyQueue
+           int s = readyQueue.size();
+	          for(int i = 0; i < s; i++)
+	           {
+            		ThreadCB queueThread = readyQueue.get(i);
+            		queueThread.lastCpuBurst = HClock.get() - queueThread.lastDispatch;
+            		queueThread.estimateBurstTime();
+
+            		thread.lastCpuBurst = HClock.get() - thread.lastDispatch;
+            	  thread.estimateBurstTime();
+
+		             //If the new threads burst time is smaller than any member of the ready queue, append
+		             if(thread.estimatedBurstTime < queueThread.estimatedBurstTime)
+		               {
+		                   thread.getTask().setCurrentThread(null);
+	                     MMU.setPTBR(null);
+        	             thread.setStatus(ThreadReady);
+		                   thread.lastCpuBurst = HClock.get() - thread.lastDispatch;
+		                   thread.estimateBurstTime();
+        	             readyQueue.append(thread);
+		               }
+	            }
         }
-        if(readyQueue.isEmpty())                                  
+        if(readyQueue.isEmpty())
         {
             MMU.setPTBR(null);
             return FAILURE;
         }
         else
         {
-            thread = (ThreadCB) readyQueue.removeHead();           
-            MMU.setPTBR(thread.getTask().getPageTable());          
-            thread.getTask().setCurrentThread(thread);              
-            thread.setStatus(ThreadRunning);                        
-
+            thread = (ThreadCB) readyQueue.removeHead();
+            MMU.setPTBR(thread.getTask().getPageTable());
+            thread.getTask().setCurrentThread(thread);
+            thread.setStatus(ThreadRunning);
+	    thread.lastCpuBurst = HClock.get() - thread.lastDispatch;
+	    thread.estimateBurstTime();
         }
-        HTimer.set(50);                                             
+        HTimer.set(50);
+	thread.lastDispatch = HClock.get();
         return SUCCESS;
+    }
+
+    //This is used to estimate the burst time for each thread.
+    public static void estimateBurstTime()
+    {
+	esitmatedBurstTime = (0.75*lastCpuBurst)+(0.25*lastCpuBurst);
+	if(estimatedBurstTime < 5)
+		estimatedBurstTime = 5;
     }
 
     /**
@@ -274,7 +315,7 @@ public class ThreadCB extends IflThreadCB
         can insert code here to print various tables and data
         structures in their state just after the warning happened.
         The body can be left empty, if this feature is not used.
-       
+
         @OSPProject Threads
      */
     public static void atWarning()

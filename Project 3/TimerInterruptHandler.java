@@ -1,3 +1,8 @@
+/**
+*Adam P. Matthews
+*CSCE-311
+*09/27/17
+**/
 package osp.Threads;
 
 import osp.IFLModules.*;
